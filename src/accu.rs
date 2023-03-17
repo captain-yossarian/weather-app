@@ -1,8 +1,9 @@
 use crate::errors::WeatherError;
+use reqwest::IntoUrl;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
-use std::{ error::Error as StdError};
-use url::{ Url};
+use std::error::Error as StdError;
+use url::Url;
 
 const API_KEY: &str = "QUp0o9h0Ir30CfhAGsolH5wUDHRUKAbZ";
 const BASE_URL: &str = "http://dataservice.accuweather.com";
@@ -15,7 +16,7 @@ const CITY_SEARCH: &str = "locations/v1/cities/search";
 
 const APIKEY_TUPLE: (&str, &str) = ("apikey", API_KEY);
 
-fn url(route: &str) -> String {
+fn with_path(route: &str) -> String {
     format!("{}/{}", BASE_URL, route)
 }
 
@@ -36,12 +37,10 @@ where
     }
 }
 
-async fn make_request(url: &str) -> Result<String, Box<dyn StdError>> {
+async fn make_request<T: IntoUrl>(url: T) -> Result<String, WeatherError> {
     let result = reqwest::get(url).await?.text().await?;
     Ok(result)
 }
-
-
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AdministrativeArea {
@@ -58,35 +57,32 @@ pub struct CitySearch {
     AdministrativeArea: AdministrativeArea,
 }
 
-pub struct AccuProvider {
-    url_base: Url,
-}
+pub struct AccuProvider {}
 
 impl AccuProvider {
     pub async fn new() -> Self {
-        let url_base = Url::parse("http://dataservice.accuweather.com").unwrap();
-        AccuProvider { url_base }
+        AccuProvider {}
     }
 
     pub async fn request_city_search(self, city: &str) -> Result<String, WeatherError> {
-        let path = &url(CITY_SEARCH);
-        let base = Url::parse_with_params(path, &[("q", city), APIKEY_TUPLE])?;
-        let response = reqwest::get(base).await?.text().await?;
-        Ok(response)
+        let base = Url::parse_with_params(
+            &format!("{}/{}", BASE_URL, CITY_SEARCH),
+            &[("q", city), APIKEY_TUPLE],
+        )?;
+        make_request(base).await
     }
 
     pub async fn city_search(self, city: &str) -> Result<Vec<CitySearch>, WeatherError> {
-        let response = self.request_city_search(city).await?;
-        println!("{}", to_json(response.clone()));
-        let city_search = to_struct::<Vec<CitySearch>>(to_json(response));
+        let url = self.request_city_search(city).await?;
+        let city_search = to_struct::<Vec<CitySearch>>(to_json(url));
 
         city_search
     }
 
     pub async fn location(self) -> Result<Vec<CitySearch>, WeatherError> {
-        let path = &url(URL_LOCATIONS);
+        let path = with_path(URL_LOCATIONS);
         println!("{}", path);
-        let base = Url::parse_with_params(path, &[APIKEY_TUPLE]).unwrap();
+        let base = Url::parse_with_params(&path, &[APIKEY_TUPLE]).unwrap();
 
         let resp = reqwest::get(base).await?.text().await?;
         to_struct::<Vec<CitySearch>>(to_json(resp))
