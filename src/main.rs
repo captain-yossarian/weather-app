@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-use std::{collections::HashMap, error::Error};
+use std::error::Error;
 mod accu;
+mod errors;
 use accu::AccuProvider;
 
 #[derive(Serialize, Deserialize, Debug)]
